@@ -1,0 +1,129 @@
+library link --> esp 32c6 as zigbee example
+
+https://github.com/sigmdel/xiao_esp32c6_sketches
+https://github.com/espressif/esp-idf/tree/master/examples/storage/nvs  fro eeprom 
+https://docs.espressif.com/projects/esp-zigbee-sdk/en/latest/esp32/api-reference/esp_zigbee_core.html
+
+
+
+
+# Arduino-ESP32 Zigbee AC Electrical Measurement Example
+
+This example shows how to configure the Zigbee router device and
+ use it as a Home Automation (HA) AC electrical measurement device that reports voltage, 
+current, power, and frequency measurements.
+
+
+C:\Users\RND127\AppData\Local\Arduino15\packages\esp32\hardware\esp32\3.3.2
+
+
+
+single core RISC-V Core @ upto 160MHz
+
+512 KB SRAM
+
+320KB ROM
+
+peripherals : 2 UART, 1 LPUART, 1 SPI,1 I2C, 1 LPI2C, 1 ADC (12 bit)
+
+
+
+Radios:
+
+2.4 GHz WiFi 6
+
+802.11ax/b/g/n
+
+Bluetooth 5 LE
+Bluetooth 5.3 Certified
+
+
+
+Arduino IDE:
+
+Install the latest version of Arduino IDE from arduino.cc
+Add ESP32 board support to Arduino IDE:
+
+Open Arduino IDE
+Go to File > Preferences
+In "Additional Board Manager URLs, " add: https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+Go to Tools > Board > Boards Manager
+Search for "esp32" and install the latest version
+
+Tools--->Board--->Board manager--->ESP32 install
+
+Tools > Board > ESP32 Arduino >ESP32C6 Dev Module
+
+
+To upload code:
+
+---> connect Tx-Rx,Rx-Tx,GND-GND, 3.3v-3.3v
+
+---> press "->"
+     wait for connecting once come press and release together IOO and reset quickly(1 sec)
+
+     or open serial monitor press and release together IOO and reset quickly(1 sec)(recommended)
+
+---> code uploaded
+
+
+
+
+
+ESP32 WiFi
+
+--> In STA(station) mode ESP32 gets IP address from router:
+    ESP 32 is another station of your router like phones, laptops ,pc etc.
+    ESP32 gets IP address from router DHCP
+
+--> In SAP(soft acess point) mode ESP32 assigns IP addresses to clients:
+    ESP 32 is center of network providing connectivity to external devices like phone,laptop,pc etc
+    ESP32 assigns IP address to client
+
+--> Maximum of 5 clients in SAP mode
+
+--> Both modes allow ESP32 to  as a webserver, adjustable Tpower upt 20.5dBm
+
+--> ESP32 supports WiFi protocols 802.11 b/g/n,operates at 2.4GHz,Datarates:upto 150Mbps
+
+--> in Arduino ide WiFi.h library used
+
+
+
+ESP32 Bluetooth
+
+--> ESP32 has both  classic Bluetooth(for continuos data streaming) : wireless headset,keyboard,audio devices 
+    file transfer between pc and phone,
+    and BLE(Bluetooth Low Energy)(short burst of connection): Medical Monitors,Fitness bands,IOT Sensors etc. 
+
+--> can act as a client or as a server
+  
+
+ESP32 zigbee
+ 
+1)Tools --zigbee mode--Zigbee zczr(for router/coordinator)/zigbee enddevice(for enddevice)
+
+2) Tools -- partition scheme --->zigbee zczr 4mb with spiffs(For router/coordinator)
+/zigbee 4mb with spiffs(For endpoint)
+
+3)programmer -- ESPtool
+
+4) baud rate -- 115200  and  tools --->upload speed :921600
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+

@@ -1,0 +1,427 @@
+//https://www.hackster.io/tech_nickk/getting-started-with-zigbee-on-beetle-esp32-c6-mini-5f68b1
+//https://github.com/espressif/esp-zigbee-sdk/tree/main/examples
+//https://wiki.seeedstudio.com/xiao_esp32c6_zigbee_arduino/
+
+
+
+
+
+
+/*
+connect Tx of ESp32 to Rx of Zigbee  this will host zigbee device
+
+Zigbee coordinator act as a switch
+
+Zigbee End device act as a light
+
+
+Building the Zigbee On/Off Light
+Circuit Connection
+For the light device, we'll use a simple LED circuit:
+
+Connect an LED to GPIO pin 4 of the ESP32-C6 (use a current-limiting resistor of 220Ω)
+Connect the negative leg of the LED (cathode) to GND
+ESP32-C6 GPIO4 ---> 220Ω Resistor ---> LED ---> GND
+
+Setting Up the Network:
+
+
+Creating a Zigbee Network
+1)First, upload the light device code to one ESP32-C6
+2)Then, upload the switch device code to the second ESP32-C6
+3)Power both devices on
+
+4)
+When powered up:
+
+--->The light device will create a Zigbee network as the coordinator
+
+---->The switch device will scan for available networks and join automatically
+Once connected, the switch will discover the light device
+
+
+Testing the System
+
+---->Press the button connected to the switch device
+---->The LED connected to the light device should toggle on/off
+The serial monitor will show debug information about the commands being sent and received
+
+*/
+
+
+/*
+Understanding the Code:
+
+
+1)Zigbee Network Formation:
+
+The light device is configured to start a Zigbee network as a coordinator
+
+The switch joins the network as an end device
+
+Both devices implement the Home Automation profile, with specific device types (on/off light and on/off switch)
+
+2)Command Processing:
+
+When the button is pressed on the switch device, it sends an on/off command
+
+The command is directed specifically to the light device's endpoint
+
+The light device receives the command and updates its LED state accordingly
+
+Both devices communicate using standard Zigbee Cluster Library (ZCL) commands
+
+3)Device Discovery:
+
+The switch uses the Zigbee Device Object (ZDO) Match Descriptor Request to find devices with the on/off cluster
+
+When it discovers the light device, it stores its address for communication
+
+This enables automatic discovery without hardcoding device addresses
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//=========code for zigbee light device==============//
+// Based on code by Espressif Systems and Jan Procházka
+// Licensed under Apache License 2.0
+
+#ifndef ZIGBEE_MODE_ED
+#error "Zigbee end device mode is not selected in Tools->Zigbee mode"
+#endif
+#include "Zigbee.h"
+/* Zigbee light bulb configuration */
+#define ZIGBEE_LIGHT_ENDPOINT 10
+uint8_t led = 4;
+uint8_t button = BOOT_PIN;
+ZigbeeLight zbLight = ZigbeeLight(ZIGBEE_LIGHT_ENDPOINT);
+/********************* RGB LED functions **************************/
+void setLED(bool value) {
+digitalWrite(led, value);
+}
+/********************* Arduino functions **************************/
+void setup() {
+Serial.begin(115200);
+// Init LED and turn it OFF (if LED_PIN == RGB_BUILTIN, the rgbLedWrite() will be used under the hood)
+pinMode(led, OUTPUT);
+digitalWrite(led, LOW);
+// Init button for factory reset
+pinMode(button, INPUT_PULLUP);
+//Optional: set Zigbee device name and model
+zbLight.setManufacturerAndModel("Espressif", "ZBLightBulb");
+// Set callback function for light change
+zbLight.onLightChange(setLED);
+//Add endpoint to Zigbee Core
+Serial.println("Adding ZigbeeLight endpoint to Zigbee Core");
+Zigbee.addEndpoint(&zbLight);
+// When all EPs are registered, start Zigbee. By default acts as ZIGBEE_END_DEVICE
+if (!Zigbee.begin()) {
+Serial.println("Zigbee failed to start!");
+Serial.println("Rebooting...");
+ESP.restart();
+}
+Serial.println("Connecting to network");
+while (!Zigbee.connected()) {
+Serial.print(".");
+delay(100);
+}
+Serial.println();
+}
+void loop() {
+// Checking button for factory reset
+if (digitalRead(button) == LOW) {  // Push button pressed
+// Key debounce handling
+delay(100);
+int startTime = millis();
+while (digitalRead(button) == LOW) {
+delay(50);
+if ((millis() - startTime) > 3000) {
+// If key pressed for more than 3secs, factory reset Zigbee and reboot
+Serial.println("Resetting Zigbee to factory and rebooting in 1s.");
+delay(1000);
+Zigbee.factoryReset();
+}
+}
+// Toggle light by pressing the button
+zbLight.setLight(!zbLight.getLightState());
+}
+delay(100);
+}
+Building the Zigbee On/Off Switch
+In this case we will use the Built in boot button to act as our switch, you can also use an external push button but ensure you add that in the code
+
+//
+
+
+
+//==========Building the Zigbee On/Off Switch=========//
+
+/*Code for the Zigbee Switch Device
+This code can be found navigating to Go to File > Examples > Zigbee > Zigbee_On_Off_Switch
+
+Before Uploading the code, ensure the correct board is selected and the following settings are selected
+
+Select the Coordinator Zigbee mode: Tools > Zigbee mode: Zigbee ZCZR (coordinator/router).
+Select Partition Scheme for Zigbee: Tools > Partition Scheme: Zigbee 4MB with spiffs.
+*/
+
+// Based on code by Espressif Systems and Jan Procházka
+// Licensed under Apache License 2.0
+
+
+#ifndef ZIGBEE_MODE_ZCZR
+#error "Zigbee coordinator mode is not selected in Tools->Zigbee mode"
+#endif
+#include "Zigbee.h"
+/* Zigbee switch configuration */
+#define SWITCH_ENDPOINT_NUMBER 5
+#define GPIO_INPUT_IO_TOGGLE_SWITCH BOOT_PIN
+#define PAIR_SIZE(TYPE_STR_PAIR)    (sizeof(TYPE_STR_PAIR) / sizeof(TYPE_STR_PAIR[0]))
+typedef enum {
+SWITCH_ON_CONTROL,
+SWITCH_OFF_CONTROL,
+SWITCH_ONOFF_TOGGLE_CONTROL,
+SWITCH_LEVEL_UP_CONTROL,
+SWITCH_LEVEL_DOWN_CONTROL,
+SWITCH_LEVEL_CYCLE_CONTROL,
+SWITCH_COLOR_CONTROL,
+} SwitchFunction;
+typedef struct {
+uint8_t pin;
+SwitchFunction func;
+} SwitchData;
+typedef enum {
+SWITCH_IDLE,
+SWITCH_PRESS_ARMED,
+SWITCH_PRESS_DETECTED,
+SWITCH_PRESSED,
+SWITCH_RELEASE_DETECTED,
+} SwitchState;
+static SwitchData buttonFunctionPair[] = {{GPIO_INPUT_IO_TOGGLE_SWITCH, SWITCH_ONOFF_TOGGLE_CONTROL}};
+ZigbeeSwitch zbSwitch = ZigbeeSwitch(SWITCH_ENDPOINT_NUMBER);
+/********************* Zigbee functions **************************/
+static void onZbButton(SwitchData *button_func_pair) {
+if (button_func_pair->func == SWITCH_ONOFF_TOGGLE_CONTROL) {
+// Send toggle command to the light
+Serial.println("Toggling light");
+zbSwitch.lightToggle();
+}
+}
+/********************* GPIO functions **************************/
+static QueueHandle_t gpio_evt_queue = NULL;
+static void IRAM_ATTR onGpioInterrupt(void *arg) {
+xQueueSendFromISR(gpio_evt_queue, (SwitchData *)arg, NULL);
+}
+static void enableGpioInterrupt(bool enabled) {
+for (int i = 0; i < PAIR_SIZE(buttonFunctionPair); ++i) {
+if (enabled) {
+enableInterrupt((buttonFunctionPair[i]).pin);
+} else {
+disableInterrupt((buttonFunctionPair[i]).pin);
+}
+}
+}
+/********************* Arduino functions **************************/
+void setup() {
+Serial.begin(115200);
+//Optional: set Zigbee device name and model
+zbSwitch.setManufacturerAndModel("Espressif", "ZigbeeSwitch");
+//Optional to allow multiple light to bind to the switch
+zbSwitch.allowMultipleBinding(true);
+//Add endpoint to Zigbee Core
+Serial.println("Adding ZigbeeSwitch endpoint to Zigbee Core");
+Zigbee.addEndpoint(&zbSwitch);
+//Open network for 180 seconds after boot
+Zigbee.setRebootOpenNetwork(180);
+// Init button switch
+for (int i = 0; i < PAIR_SIZE(buttonFunctionPair); i++) {
+pinMode(buttonFunctionPair[i].pin, INPUT_PULLUP);
+/* create a queue to handle gpio event from isr */
+gpio_evt_queue = xQueueCreate(10, sizeof(SwitchData));
+if (gpio_evt_queue == 0) {
+Serial.println("Queue creating failed, rebooting...");
+ESP.restart();
+}
+attachInterruptArg(buttonFunctionPair[i].pin, onGpioInterrupt, (void *)(buttonFunctionPair + i), FALLING);
+}
+// When all EPs are registered, start Zigbee with ZIGBEE_COORDINATOR mode
+if (!Zigbee.begin(ZIGBEE_COORDINATOR)) {
+Serial.println("Zigbee failed to start!");
+Serial.println("Rebooting...");
+ESP.restart();
+}
+Serial.println("Waiting for Light to bound to the switch");
+//Wait for switch to bound to a light:
+while (!zbSwitch.bound()) {
+Serial.printf(".");
+delay(500);
+}
+// Optional: List all bound devices and read manufacturer and model name
+std::list<zb_device_params_t *> boundLights = zbSwitch.getBoundDevices();
+for (const auto &device : boundLights) {
+Serial.printf("Device on endpoint %d, short address: 0x%x\r\n", device->endpoint, device->short_addr);
+Serial.printf(
+"IEEE Address: %02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X\r\n", device->ieee_addr[7], device->ieee_addr[6], device->ieee_addr[5], device->ieee_addr[4],
+device->ieee_addr[3], device->ieee_addr[2], device->ieee_addr[1], device->ieee_addr[0]
+);
+char *manufacturer = zbSwitch.readManufacturer(device->endpoint, device->short_addr, device->ieee_addr);
+char *model = zbSwitch.readModel(device->endpoint, device->short_addr, device->ieee_addr);
+if (manufacturer != nullptr) {
+Serial.printf("Light manufacturer: %s\r\n", manufacturer);
+}
+if (model != nullptr) {
+Serial.printf("Light model: %s\r\n", model);
+}
+}
+Serial.println();
+}
+void loop() {
+// Handle button switch in loop()
+uint8_t pin = 0;
+SwitchData buttonSwitch;
+static SwitchState buttonState = SWITCH_IDLE;
+bool eventFlag = false;
+/* check if there is any queue received, if yes read out the buttonSwitch */
+if (xQueueReceive(gpio_evt_queue, &buttonSwitch, portMAX_DELAY)) {
+pin = buttonSwitch.pin;
+enableGpioInterrupt(false);
+eventFlag = true;
+}
+while (eventFlag) {
+bool value = digitalRead(pin);
+switch (buttonState) {
+case SWITCH_IDLE:           buttonState = (value == LOW) ? SWITCH_PRESS_DETECTED : SWITCH_IDLE; break;
+case SWITCH_PRESS_DETECTED: buttonState = (value == LOW) ? SWITCH_PRESS_DETECTED : SWITCH_RELEASE_DETECTED; break;
+case SWITCH_RELEASE_DETECTED:
+buttonState = SWITCH_IDLE;
+/* callback to button_handler */
+(*onZbButton)(&buttonSwitch);
+break;
+default: break;
+}
+if (buttonState == SWITCH_IDLE) {
+enableGpioInterrupt(true);
+eventFlag = false;
+break;
+}
+vTaskDelay(10 / portTICK_PERIOD_MS);
+}
+// print the bound lights every 10 seconds
+static uint32_t lastPrint = 0;
+if (millis() - lastPrint > 10000) {
+lastPrint = millis();
+zbSwitch.printBoundDevices(Serial);
+}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#include "Zigbee.h"
+
+// Relay pin (physical pin 3)
+static const uint8_t RELAY_PIN = 3;
+
+// Zigbee endpoint number (arbitrary, e.g. 10)
+#define ZIGBEE_LIGHT_ENDPOINT 10
+
+// Create a ZigbeeLight object on the chosen endpoint
+ZigbeeLight zbLight(ZIGBEE_LIGHT_ENDPOINT);
+
+/**
+ * Sets the relay state:
+ * @param state true = ON (HIGH), false = OFF (LOW)
+ */
+void setRelay(bool state) {
+  digitalWrite(RELAY_PIN, state ? HIGH : LOW);
+}
+
+void setup() {
+  // Initialize the relay pin
+  pinMode(RELAY_PIN, OUTPUT);
+  setRelay(false);  // Default OFF
+
+  // (Optional) Set the Zigbee device info for identification
+  zbLight.setManufacturerAndModel("Espressif", "ZBRelay");
+
+  // Specify the function to call when the Zigbee on/off state changes
+  zbLight.onLightChange(setRelay);
+
+  // Register the ZigbeeLight endpoint with the Zigbee stack
+  Zigbee.addEndpoint(&zbLight);
+
+  // Initialize Zigbee (default: End Device mode)
+  if (!Zigbee.begin()) {
+    // If Zigbee fails to start, restart the device
+    ESP.restart();
+  }
+
+  // Wait until the device connects to the Zigbee network
+  while (!Zigbee.connected()) {
+    delay(100);
+  }
+}
+
+void loop() {
+  // No extra logic is required; just maintain Zigbee operations
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
